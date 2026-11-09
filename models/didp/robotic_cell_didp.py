@@ -139,15 +139,16 @@ for i in range(1, m + 1):
 model.add_dual_bound(robot_bound)
 
 """
-Machine bounds: machine i must finish its current job, process every job still in the source node, 
-and then the last job (n) must travel to the sink node through machines i+1..m.
+Machine bounds: machine i is a single resource that processes jobs one at a time, so the remaining
+makespan is at least residual[i] + processing of jobs still in the source + tail after job n leaves i.
+Indexed by x0 so the solver evaluates a table lookup, not a chain of per-machine expressions.
+(Tried adding upstream jobs and a live tail condition; it slowed CABS and found worse incumbents.)
 """
 for i in range(1, m + 1):
-    last_job = n
-    tail = fwd[i] + sum(p[after][last_job] for after in range(i + 1, m + 1)) #last job (n) must travel to the sink node through machines i+1..m
-    remaining = [0] + [sum(p[i][w] for w in range(k, n + 1)) + tail for k in range(1, n + 1)] #process every job still in the source node
+    tail = fwd[i] + sum(p[l][n] for l in range(i + 1, m + 1))
+    remaining = [0] + [sum(p[i][w] for w in range(k, n + 1)) + tail for k in range(1, n + 1)]
     remaining_table = model.add_int_table(remaining)
-    model.add_dual_bound(residual[i] + remaining_table[x0]) # index x_0 = k. machine i must finish its current job, process every job left in source (n - k + 1 left), and last job has to travel to sink node.
+    model.add_dual_bound(residual[i] + remaining_table[x0])
 
 """
 Solve
