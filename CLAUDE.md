@@ -40,43 +40,44 @@ Instance file format (authors'): `m`, `n`, then `m` rows of `n` processing times
 
 ## The model (how the paper's DP maps to DIDPPy)
 
-Paper state: `<t, y, (x_0..x_m), (C_0..C_m)>` with absolute clock `t` and absolute completion
-times `C_i`. We deliberately do NOT store absolute times. Our state:
+Paper state: `<t, y, (x_0..x_m), (C_0..C_m)>`. The DIDPPy state is the same tuple.
+`INF` is the paper's ∞ (a constant larger than the one-job-at-a-time makespan U).
 
-| paper | ours | type | notes |
+| paper | ours | type | target (initial state) |
 |---|---|---|---|
-| `y` | `robot` | ElementVar(station, m+2 objects) | indexes `travel[robot, i]` |
-| `x_0` | `x0` = `job_on[0]` | ElementVar(job, n+1 objects), target 1 | next job in source; 0 once empty |
-| `x_i` | `job_on[i]` | ElementVar(job), target 0 | job on machine i; 0 = idle |
-| `C_i` | `residual[i] = max(0, C_i - t)` | IntResourceVar(less_is_better=True), target 0 | remaining work on machine i; 0 = idle |
-| `t` | not stored | | accumulated in the transition cost |
-| `C_0` | not stored | | always equals t after a load, so residual is identically 0 |
+| `t` | `t` | IntVar | 0 |
+| `y` | `robot` | ElementVar(station, m+2 objects) | 0 |
+| `x_0` | `x0` = `job_on[0]` | ElementVar(job, n+1 objects) | 1 |
+| `x_i` | `job_on[i]` | ElementVar(job) | 0 |
+| `C_0` | `C[0]` | IntVar | 0 |
+| `C_i` | `C[i]` | IntVar | INF |
 
 Transitions: one per source station `i = 0..m`, "carry job on `i` to `i+1`".
 - preconditions: `job_on[i] != 0` and (`i == m` or `job_on[i+1] == 0`)
-- `move_duration = max(travel[robot,i], residual[i]) + travel[i,i+1]` (no residual term for i=0)
-- cost = `move_duration + state_cost()` (additive, CABS with FOperator.Plus)
-- effects: `robot <- i+1`; source: `x0 <- (x0==n ? 0 : x0+1)` or `job_on[i] <- 0, residual[i] <- 0`;
-  destination (if `i < m`): `job_on[i+1] <- job_on[i]`, `residual[i+1] <- proc[i+1, job_on[i]]`;
-  every other machine j: `residual[j] <- max(0, residual[j] - move_duration)`
-- base case: all `job_on[i] == 0`, cost 0.
+- eq. (9): `t' = max(t + travel[robot,i], C[i]) + travel[i,i+1]`
+- eq. (10): `robot <- i+1`
+- eqs. (11)/(12): case I unload (`x_i <- 0`, `C_i <- INF`); case II source (`x0 <- x0+1`, `C_0 <- t'`);
+  case III destination (`x_{i+1} <- k`, `C_{i+1} <- t' + p[i+1,k]`); case IV unchanged
+- cost = `(t' - t) + state_cost()` so V(target) is the t of a final state (z*)
+- base case: all `job_on[i] == 0`, cost 0
 
-Why residuals instead of absolute `C_i`: states identical up to a time shift merge; `residual`
-is a sound `less_is_better` resource variable; idle has a canonical value (0). Absolute `t`
-would NOT be a valid resource variable with additive cost (later t can mean less waiting).
+`t` and `C_i` are ordinary IntVars, not resource variables: with additive remaining cost, a later
+clock can mean less waiting, so `less_is_better` on `t` would be unsound. The paper's dominance
+rule (eq. 17) is what made absolute times work in their C++; DIDPPy cannot express that rule.
 
 Dual bounds (lower bounds on remaining makespan; DIDPPy takes the max of all registered):
 - robot bound: forward travel for every remaining move (`buffer_travel[x0]` + `fwd[i]` per occupied machine)
-- per-machine bound i: `residual[i] + sum_{w>=x0} p[i][w] + tail`, as a table indexed by `x0`
+- per-machine bound i: `max(0, C[i]-t)` if occupied, plus `sum_{w>=x0} p[i][w] + tail`, table on `x0`
 
 ## What DIDPPy cannot express from the paper
 
 The paper's dominance rule (eq. 17, vectors `d`, `e`, bounds `lambda`, `mu`) compares states
 with different configurations and uses a joint function of both states. DIDPPy's only
 dominance mechanism is resource variables (identical non-resource vars + componentwise
-comparison). We capture only the `d = d'` special case via `residual`. This is why the
-authors' C++ scales to m=15 and ours degrades past m~12. Implementing the full rule needs a
-hand-written label-correcting search, not a DIDPPy model.
+comparison). Absolute `t` and `C` cannot be resource variables, so we currently have no
+dominance beyond identical-state duplicate detection. This is why the authors' C++ scales
+to m=15 and ours degrades past m~12. Implementing the full rule needs a hand-written
+label-correcting search, not a DIDPPy model.
 
 ## Validation status (as of 2026-11-03)
 
@@ -108,10 +109,12 @@ for cross-checking small instances (m<=6, n<=8).
 
 ## Next steps, in priority order
 
-1. Tighten the machine bound: add processing of jobs already on upstream machines,
-   `sum(proc[i, job_on[j]] for j in range(1, i))` (zero padding makes idle contribute 0).
-   Make `tail` conditional on job n not having left machine i. Re-measure `tr_50_pr_300` and `m_13_n_08`.
+1. ~~Tighten the machine bound with upstream jobs + live tail.~~ Tried 2026-11-03. Sound but slower:
+   m=10/12 ~2×, tr_10_pr_10 1.0s→2.5s, tr_50_pr_300 missed the optimum in 60s (5642 vs 5639).
+   Reverted to the cheap `x0`-indexed table. Extra per-state work and CABS beam distortion
+   outweighed the tighter h. Do not retry without a cheaper encoding (one table, no OR-chain).
 2. Try `dp.CAASDy` (single-pass A*) for the optimality proof; CABS re-expands layers on each beam doubling.
+   A/B on `tr_50_pr_300` (93 s CABS) and `m_13_n_08` (unproven at 60 s).
 3. Robot bound: account for empty return legs (careful: min empty leg can be 0).
 4. Try `keep_all_layers=True`.
 5. Only if m>=13 matters: port the authors' label-correcting algorithm with the full dominance
@@ -121,7 +124,8 @@ for cross-checking small instances (m<=6, n<=8).
 
 - `from instance...` only works because the model inserts the repo root into sys.path; keep that.
 - `job` object type must have `n+1` objects, `station` must have `m+2`.
-- Keep `residual = 0` for idle machines (canonical states); never use a large "infinity".
+- Idle `C_i` is `INF` (paper's ∞), a constant `U+1` where U is the one-job-at-a-time makespan.
+  Do not use `C_i - t` in a bound unless `x_i != 0` (otherwise it is INF).
 - Effects are all evaluated on the pre-transition state, so `job_on[i]` on the right-hand side
   of the destination effects is the carried job even though `job_on[i]` is also being reset.
 - The PDF-to-text copy of the paper loses the bar on the unloaded station index in eqs. (11)/(12);

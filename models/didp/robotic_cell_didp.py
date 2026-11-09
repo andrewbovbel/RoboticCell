@@ -6,13 +6,22 @@ import didppy as dp
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from instance.instance_reader import read_instance  
+from instance.instance_reader import read_instance
 
 instance_path = sys.argv[1] if len(sys.argv) > 1 else ROOT / "instance" / "paper_sample_instance.txt"
 m, n, p, tau = read_instance(instance_path)
 
+# Paper's "large enough constant" for idle completion times. U is the one-job-at-a-time
+# makespan (always feasible), so any real C_i is < INF.
+U = (
+    sum(p[i][k] for i in range(1, m + 1) for k in range(1, n + 1))
+    + n * sum(tau[i][i + 1] for i in range(m + 1))
+    + (n - 1) * tau[m + 1][0]
+)
+INF = U + 1
+
 # ---------------------------------------------------------------------------
-# Model
+# Model  — paper state ⟨t, y, (x_0..x_m), (C_0..C_m)⟩
 # ---------------------------------------------------------------------------
 model = dp.Model(maximize=False, float_cost=False)
 
@@ -20,16 +29,20 @@ station = model.add_object_type(number=m + 2)  # 0 = input buffer, 1..m = machin
 job = model.add_object_type(number=n + 1)      # 0 = "no job", 1..n = jobs in processing order
 
 """
+    t: elapsed time. Initial 0. Makespan is t at a final state.
+"""
+t = model.add_int_var(target=0, name="t")
+
+"""
     Robot starts at source node = 0.
-    This state variable keeps track of which station the robot is
-    Variable indexes τ[y, i] in the cost
+    Variable indexes τ[y, i] in eq. (9).
 """
 robot = model.add_element_var(object_type=station, target=0, name="y")
 
 """
-    Tracks xi from paper; indicates the first unprocessed job in station i.
-    x0 is source node; where the initial value of the first unprocessed job is 1.
-    If x_i, i >= 1: job is currently on machine i; 0 if the machine is idle.
+    The paper's vector (x_0, ..., x_m).
+    x_0: next job waiting in the source (initially 1); 0 once all jobs have left it.
+    x_i, i >= 1: job currently on machine i; 0 if the machine is idle.
 """
 x0 = model.add_element_var(object_type=job, target=1, name="x_0")
 job_on = [x0]
@@ -37,149 +50,144 @@ for i in range(1, m + 1):
     job_on.append(model.add_element_var(object_type=job, target=0, name=f"x_{i}"))
 
 """
-    Important change!
-    With absolute C_i, two robot routes that reach the same physical situation (same x, same remaining work on each machine) but at different clock times are different states.
-    We propose residual: the remaining processing time on machine i (C_i - t), 0 if idle.
-    The clock t itself is not a state variable: each transition adds its duration to the cost,
-    so V(target) is the makespan.
+    C_i: completion time of the job on station i.
+    Idle machines: C_i = INF. C_0 = 0 initially, INF iff the source is empty.
+    Initial C = (0, INF, ..., INF).
 """
-residual = [None]  # the input buffer has no processing time, so index 0 is unused
+C = [model.add_int_var(target=0, name="C_0")]
 for i in range(1, m + 1):
-    residual.append(model.add_int_resource_var(target=0, less_is_better=True, name=f"r_{i}"))
+    C.append(model.add_int_var(target=INF, name=f"C_{i}"))
 
-# Tables of constants
-travel = model.add_int_table(tau)  # tau[y, i]
-proc = model.add_int_table(p)      # p[i, k]
+travel = model.add_int_table(tau)
+proc = model.add_int_table(p)
 
 """
-Transitions: one per station i = 0..m, "carry the job on station i to i+1"
+Transitions: one per station i = 0..m, "carry the job on station i to i+1".
 
-(9) with t subtracted:
-delta = max(tau[y, i], C_i - t) + tau[i, i+1]
-
-C_i - t = residual
+Eq. (9):  t' = max{t + τ_{y,i}, C_i} + τ_{i,i+1}
+Eq. (10): y' = i + 1
+Eq. (11)/(12) cases I–IV on x and C.
 """
-
 for i in range(m + 1):
-    if i == 0: 
-        move_duration = travel[robot,0] + travel[0,1] #the source node's next job is always available, robot does not need to wait
-    else:
-        move_duration = dp.max(travel[robot,i], residual[i]) + travel[i, i+1] #max(travel to i, work left on i) + travel from i to i+1
+    # (9) — uses C_i even for i = 0 (the source's completion stamp)
+    t_next = dp.max(t + travel[robot, i], C[i]) + travel[i, i + 1]
 
-    preconditions = [job_on[i] != 0] #there must be a job to pick up
+    preconditions = [job_on[i] != 0]  # non-idle
     if i < m:
-        preconditions.append(job_on[i + 1] == 0) #next station must be free. if i==m, then sink always has room.
+        preconditions.append(job_on[i + 1] == 0)  # non-blocked; sink always has room
 
-    effects = [(robot, i + 1)]  #robot position gets updated
-
-    #cases 11,12
+    effects = [
+        (t, t_next),
+        (robot, i + 1),  # (10)
+    ]
 
     if i == 0:
-        #case (11)(II)
-        effects.append((x0, (x0 == n).if_then_else(0, x0 + 1))) #if x0 holds job n as next job, make it empty (0), else increment to next job.
+        # (11)(II) / (11)(I): advance the source, or empty it after job n
+        effects.append((x0, (x0 == n).if_then_else(0, x0 + 1)))
+        # (12)(II) C'_0 = t' if more jobs remain; (12)(I) C'_0 = INF after job n
+        effects.append((C[0], (x0 == n).if_then_else(INF, t_next)))
     else:
-        #case (11)(I)
-        effects.append((job_on[i], 0)) #for other stations, buffer is size 0 -> so pop it. 
+        # (11)(I) / (12)(I): unload machine i
+        effects.append((job_on[i], 0))
+        effects.append((C[i], INF))
 
-        #case (12)(I)
-        effects.append((residual[i], 0)) #station is idle.
-
-    # the destination i+1 is a machine, not the sink (m+1)
+    # destination i+1 is a machine, not the sink
     if i < m:
-        #case (11)(III)
-        effects.append((job_on[i + 1], job_on[i])) #move job k to proceeding machine i + 1
-        #case (12)(III)
-        effects.append((residual[i + 1], proc[i + 1, job_on[i]])) #r`_i+1 = p_{i+1,k}
+        # (11)(III) x'_{i+1} = k
+        effects.append((job_on[i + 1], job_on[i]))
+        # (12)(III) C'_{i+1} = t' + p_{i+1,k}
+        effects.append((C[i + 1], t_next + proc[i + 1, job_on[i]]))
 
-    #no need for (12)(II). It states if that station is the source and more jobs remain, stamp its completion time to now, C'_0 = t'. We do not use passing time t.
+    # (11)(IV) / (12)(IV): stations not involved keep x_j and C_j (no effect)
 
-    
-    for j in range(1, m + 1):
-        #stations j not involved in the move
-        if j != i and j != i + 1:
-            #case (12)(IV): clock moved forward by move_duration so decrease remaining processing time of machine j
-            effects.append((residual[j], dp.max(0, residual[j] - move_duration))) #C_j − t' = C_j − (t + move_duration) = residual[j] − move_duration
-            #case (11)(IV) : no update needed
-            #effects.append((job_on[j],job_on[j])) is redundant
-
+    # cost increment is t' - t, so V(target) = t of the final state = z*
     model.add_transition(
         dp.Transition(
             name=f"move {i}->{i + 1}",
-            cost=move_duration + dp.IntExpr.state_cost(),
+            cost=t_next - t + dp.IntExpr.state_cost(),
             preconditions=preconditions,
             effects=effects,
         )
     )
 
 """
-Base case: all jobs have reached the output buffer, i.e. every x_i = 0 (goal state)
+Base case: final states ⟨t, m+1, (0,...,0), (INF,...,INF)⟩. y = m+1 and C = INF
+are implied once every x_i is 0. Cost 0 so V = accumulated t' - t = makespan.
 """
 model.add_base_case([job_on[i] == 0 for i in range(m + 1)])
 
 """
-Dual bounds (lower bounds on remaining makespan)
-
-Why do we do lower bound on remaining makespan?
-If a current search shows the lower bound + current cost being bigger or equal to than our best incumbent, stop working on that branch! 
-We run the dual bound on every state to get a real time lower bound.
+Dual bounds: lower bounds on remaining makespan (V of the current state).
+DIDPPy takes the max of all registered bounds.
 """
+fwd = [sum(tau[l][l + 1] for l in range(i, m + 1)) for i in range(m + 1)]
 
-"""
-Robot bound: every remaining move must be carried by the robot.
-Jobs still in the source node (k..n when x_0 = k) each need fwd[0]; job on machine i needs fwd[i].
-"""
-fwd = [sum(tau[l][l + 1] for l in range(i, m + 1)) for i in range(m + 1)] #fwd[i] = forward travel from station i to the output buffer
-
-robot_travel = [0] + [(n - k + 1) * fwd[0] for k in range(1, n + 1)] #if x_0 = k the jobs in the source are k,k+1,...,n which is n - k + 1 jobs. multiply n-k+1 by fwd[0] to get how much time it takes to move all jobs to end.
+# Robot bound: every remaining loaded forward leg.
+robot_travel = [0] + [(n - k + 1) * fwd[0] for k in range(1, n + 1)]
 robot_travel_table = model.add_int_table(robot_travel)
-
 robot_bound = robot_travel_table[x0]
 for i in range(1, m + 1):
-    robot_bound += (job_on[i] != 0).if_then_else(fwd[i], 0) #if there exists a job on machine i, machine i needs fwd[i].
+    robot_bound += (job_on[i] != 0).if_then_else(fwd[i], 0)
 model.add_dual_bound(robot_bound)
 
-"""
-Machine bounds: machine i is a single resource that processes jobs one at a time, so the remaining
-makespan is at least residual[i] + processing of jobs still in the source + tail after job n leaves i.
-Indexed by x0 so the solver evaluates a table lookup, not a chain of per-machine expressions.
-(Tried adding upstream jobs and a live tail condition; it slowed CABS and found worse incumbents.)
-"""
+# Machine bound: sequential processing on machine i.
 for i in range(1, m + 1):
     tail = fwd[i] + sum(p[l][n] for l in range(i + 1, m + 1))
     remaining = [0] + [sum(p[i][w] for w in range(k, n + 1)) + tail for k in range(1, n + 1)]
     remaining_table = model.add_int_table(remaining)
-    model.add_dual_bound(residual[i] + remaining_table[x0])
+    residual_i = (job_on[i] != 0).if_then_else(dp.max(0, C[i] - t), 0)
+    model.add_dual_bound(residual_i + remaining_table[x0])
 
-"""
-Solve
-"""
-time_limit = float(sys.argv[2]) if len(sys.argv) > 2 else 60  # optional 2nd CLI arg, seconds
+# Job-path bound (paper λ, using (13) only): dedicated-robot remaining path of the
+# job now on station i. Using (13) even when blocked is still a valid LB on pickup time.
+# Gated on x_i != 0 so we never subtract t from C_i = INF.
+for i in range(m + 1):
+    e_i = dp.max(C[i], t + travel[robot, i])  # (13)
+    down = proc[i + 1, job_on[i]] if i < m else 0
+    for l in range(i + 2, m + 1):
+        down += proc[l, job_on[i]]
+    path = e_i - t + fwd[i] + down
+    model.add_dual_bound((job_on[i] != 0).if_then_else(path, 0))
+
+# μ bound for last job n still in the source (16) at i = 0:
+# earliest pickup of n, then dedicated run to the sink.
+# μ^n_0 = e_0 + (n - k)(τ_0,1 + τ_1,0), k = x_0.
+p_n_all = sum(p[l][n] for l in range(1, m + 1))
+source_cycle = tau[0][1] + tau[1][0]
+# extra 0→1→0 cycles to reach job n after picking the current x_0 = k; 0 if source empty
+cycles_to_n = [0] + [(n - k) * source_cycle for k in range(1, n + 1)]
+cycles_to_n_table = model.add_int_table(cycles_to_n)
+e0 = dp.max(C[0], t + travel[robot, 0])
+mu_n = e0 + cycles_to_n_table[x0]
+model.add_dual_bound((x0 != 0).if_then_else(mu_n - t + fwd[0] + p_n_all, 0))
+
+time_limit = float(sys.argv[2]) if len(sys.argv) > 2 else 60
 solver = dp.CABS(model, time_limit=time_limit, quiet=True)
 solution = solver.search()
 
-# Replay the transitions to recover the paper's absolute-time states <t, y, x, C>
-t, y = 0, 0
+# Replay matches the paper's ⟨t, y, x, C⟩ (INF printed as inf)
+clock, y = 0, 0
 x = [1] + [0] * m
-C = [0] + [None] * m  # None plays the role of infinity
+C_val = [0] + [None] * m
 
 
 def fmt_state():
-    cs = " ".join("inf" if c is None else str(c) for c in C)
-    return f"t {t:4d}  y {y}  x {' '.join(map(str, x))}  C {cs}"
+    cs = " ".join("inf" if c is None else str(c) for c in C_val)
+    return f"t {clock:4d}  y {y}  x {' '.join(map(str, x))}  C {cs}"
 
 
 print(fmt_state())
 for tr in solution.transitions:
     i = int(tr.name.split()[1].split("->")[0])
     k = x[i]
-    t = max(t + tau[y][i], C[i] if C[i] is not None else 0) + tau[i][i + 1]
+    clock = max(clock + tau[y][i], C_val[i] if C_val[i] is not None else 0) + tau[i][i + 1]
     y = i + 1
     if i > 0 or k == n:
-        x[i], C[i] = 0, None
+        x[i], C_val[i] = 0, None
     else:
-        x[i], C[i] = k + 1, t
+        x[i], C_val[i] = k + 1, clock
     if i < m:
-        x[i + 1], C[i + 1] = k, t + p[i + 1][k]
+        x[i + 1], C_val[i + 1] = k, clock + p[i + 1][k]
     print(fmt_state())
 
 print(f"makespan: {solution.cost}")
