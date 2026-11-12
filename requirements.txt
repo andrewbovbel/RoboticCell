@@ -2,3 +2,4 @@ didppy==0.11.1
 cplex==22.2.0.1
 docplex==2.32.264
 six==1.17.0
+matplotlib==3.11.2

@@ -107,7 +107,7 @@ def solve_instance(instance_path, time_limit=60, log="Quiet"):
         context.solver.agent = "local"
         context.solver.local.execfile = str(cpopt)
 
-    sol = mdl.solve(TimeLimit=time_limit, LogVerbosity=log)
+    sol = mdl.solve(TimeLimit=time_limit, LogVerbosity=log, Workers=1)
     status = sol.get_solve_status() if sol else "no solution"
     proven = status == "Optimal"
     obj = None

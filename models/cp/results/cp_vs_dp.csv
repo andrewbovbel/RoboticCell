@@ -1,0 +1,23 @@
+instance,label,m,n,dp_obj,dp_time_s,cp_obj,cp_time_s,cp_time_to_best_s,cp_proven,cp_status,gap,note
+dataset_D1/m_04_n_04_seed_00.txt,m_04_n_04,4,4,664,0.00710901,664,0.0599999,,True,Optimal,0,match
+dataset_D1/m_04_n_08_seed_00.txt,m_04_n_08,4,8,1220,0.0141665,1220,0.0799999,,True,Optimal,0,match
+dataset_D1/m_04_n_12_seed_00.txt,m_04_n_12,4,12,1680,0.0178143,,,,,CPO community size limit,,CPO community size limit
+dataset_D1/m_04_n_16_seed_00.txt,m_04_n_16,4,16,2563,0.02308,,,,,CPO community size limit,,CPO community size limit
+dataset_D1/m_04_n_20_seed_00.txt,m_04_n_20,4,20,2673,0.0328865,,,,,CPO community size limit,,CPO community size limit
+dataset_D1/m_04_n_24_seed_00.txt,m_04_n_24,4,24,3229,0.0294684,,,,,CPO community size limit,,CPO community size limit
+dataset_D1/m_04_n_30_seed_00.txt,m_04_n_30,4,30,4621,0.0352797,,,,,CPO community size limit,,CPO community size limit
+dataset_D1/m_05_n_18_seed_02.txt,m_05_n_18_s02,5,18,2670,0.0321282,,,,,CPO community size limit,,CPO community size limit
+dataset_D1/m_06_n_10_seed_00.txt,m_06_n_10,6,10,1804,0.0346431,,,,,CPO community size limit,,CPO community size limit
+dataset_D1/m_06_n_16_seed_07.txt,m_06_n_16_s07,6,16,2727,0.042964,,,,,CPO community size limit,,CPO community size limit
+dataset_D1/m_07_n_10_seed_06.txt,m_07_n_10_s06,7,10,1769,0.0486277,,,,,CPO community size limit,,CPO community size limit
+dataset_D1/m_08_n_12_seed_00.txt,m_08_n_12,8,12,2378,0.0909584,,,,,CPO community size limit,,CPO community size limit
+dataset_D1/m_08_n_22_seed_01.txt,m_08_n_22_s01,8,22,3933,0.212953,,,,,CPO community size limit,,CPO community size limit
+dataset_D1/m_09_n_14_seed_09.txt,m_09_n_14_s09,9,14,2707,0.331221,,,,,CPO community size limit,,CPO community size limit
+dataset_D1/m_10_n_08_seed_00.txt,m_10_n_08,10,8,1787,0.345873,,,,,CPO community size limit,,CPO community size limit
+dataset_D1/m_10_n_12_seed_00.txt,m_10_n_12,10,12,2437,0.746679,,,,,CPO community size limit,,CPO community size limit
+dataset_D1/m_11_n_06_seed_08.txt,m_11_n_06_s08,11,6,1412,0.374323,,,,,CPO community size limit,,CPO community size limit
+dataset_D1/m_12_n_08_seed_00.txt,m_12_n_08,12,8,1994,1.15074,,,,,CPO community size limit,,CPO community size limit
+dataset_D1/m_13_n_08_seed_00.txt,m_13_n_08,13,8,1877,20.1852,,,,,CPO community size limit,,CPO community size limit
+dataset_D1/m_15_n_08_seed_00.txt,m_15_n_08,15,8,2063,239.672,,,,,CPO community size limit,,CPO community size limit
+dataset_D2/tr_10_pr_10/m_12_n_10_seed_00.txt,D2-t10p10,12,10,928,0.60852,,,,,CPO community size limit,,CPO community size limit
+dataset_D2/tr_50_pr_300/m_12_n_10_seed_00.txt,D2-t50p300,12,10,5639,13.5572,,,,,CPO community size limit,,CPO community size limit
