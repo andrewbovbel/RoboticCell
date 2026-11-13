@@ -1,0 +1,1 @@
+dataset_D1/m_07_n_20_seed_00.txt               3492   3492  False 1180.00s   0.090s  match (not proven)

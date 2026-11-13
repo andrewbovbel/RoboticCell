@@ -1,0 +1,15 @@
+{
+  "instance": "dataset_D1/m_09_n_06_seed_00.txt",
+  "label": "m_09_n_06",
+  "m": 9,
+  "n": 6,
+  "dp_obj": 1462,
+  "dp_time_s": 0.0635374,
+  "cp_obj": 1462,
+  "cp_time_s": 5.81,
+  "cp_time_to_best_s": null,
+  "cp_proven": true,
+  "cp_status": "Optimal",
+  "gap": 0,
+  "note": "match"
+}

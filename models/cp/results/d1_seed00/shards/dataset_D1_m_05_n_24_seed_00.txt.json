@@ -1,0 +1,15 @@
+{
+  "instance": "dataset_D1/m_05_n_24_seed_00.txt",
+  "label": "m_05_n_24",
+  "m": 5,
+  "n": 24,
+  "dp_obj": 3596,
+  "dp_time_s": 0.0416028,
+  "cp_obj": 3596,
+  "cp_time_s": 568.51,
+  "cp_time_to_best_s": null,
+  "cp_proven": true,
+  "cp_status": "Optimal",
+  "gap": 0,
+  "note": "match"
+}

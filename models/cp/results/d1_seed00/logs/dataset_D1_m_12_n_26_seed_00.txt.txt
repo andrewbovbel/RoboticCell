@@ -1,0 +1,1 @@
+dataset_D1/m_12_n_26_seed_00.txt               5185   5320  False 1180.05s  29.440s  gap +135

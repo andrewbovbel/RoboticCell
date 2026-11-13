@@ -1,0 +1,1 @@
+dataset_D1/m_05_n_18_seed_02.txt               2670   2670  False  120.00s   0.032s  match (not proven)

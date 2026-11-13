@@ -1,0 +1,1 @@
+dataset_D2/tr_50_pr_300/m_12_n_10_seed_00.txt   5639   5772  False  120.00s  13.557s  gap +133

@@ -1,0 +1,15 @@
+{
+  "instance": "dataset_D1/m_14_n_14_seed_00.txt",
+  "label": "m_14_n_14",
+  "m": 14,
+  "n": 14,
+  "dp_obj": 3302,
+  "dp_time_s": 39.13,
+  "cp_obj": 3366,
+  "cp_time_s": 1180.01,
+  "cp_time_to_best_s": null,
+  "cp_proven": false,
+  "cp_status": "Feasible",
+  "gap": 64,
+  "note": "gap +64"
+}

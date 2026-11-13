@@ -1,0 +1,1 @@
+dataset_D1/m_06_n_26_seed_00.txt               4155   4155  False 1180.00s   0.067s  match (not proven)

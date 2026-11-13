@@ -1,0 +1,1 @@
+dataset_D1/m_10_n_06_seed_00.txt               1479   1479   True   81.21s   0.115s  match

@@ -1,0 +1,15 @@
+{
+  "instance": "dataset_D1/m_07_n_20_seed_00.txt",
+  "label": "m_07_n_20",
+  "m": 7,
+  "n": 20,
+  "dp_obj": 3492,
+  "dp_time_s": 0.0896428,
+  "cp_obj": 3492,
+  "cp_time_s": 1180.0,
+  "cp_time_to_best_s": null,
+  "cp_proven": false,
+  "cp_status": "Feasible",
+  "gap": 0,
+  "note": "match (not proven)"
+}
